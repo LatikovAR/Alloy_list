@@ -20,7 +20,7 @@ one sig List {
 
 pred list_valid[t : Time] { -- для задания начального состояния
 	all i : Item | i.next.t.prev.t = i
-	all i : Item | i not in i.^(next.t) -- нет циклов,  
+	all i : Item | i not in i.^(next.t) -- нет циклов, ЭТА СТРОЧКА ВСЕ ЛОМАЕТ! 
 	all i : Item | (i.condition.t = Outside_List_Item) implies { -- свойства элементов вне списка
 		#(i.next.t) = 0
 		#(i.prev.t) = 0
