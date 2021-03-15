@@ -18,67 +18,45 @@ one sig List {
 	items: Item -> Time
 }
 
+fun list_items[t : Time] : set Item { condition.t.List_Item }
+fun unallocated_items[t : Time] : set Item { condition.t.Outside_List_Item }
+fun all_next[i: Item, t:Time] : set Item { i.^(next.t) }
+fun all_prev[i: Item, t:Time] : set Item { i.^(prev.t) }
+fun all_reachable[i: Item, t:Time] : set Item { i.all_next[t] + i.all_prev[t] }
+fun first_list_item[t : Time] : set Item { t.list_items - t.list_items.all_next[t] }
+fun last_list_item[t : Time] : set Item { t.list_items - t.list_items.all_prev[t] }
+fun item_with_neighbours[i : Item, t : Time] : set Item { i + i.next.t + i.prev.t }
+
 pred list_valid[t : Time] { -- для задания начального состояния
-	all i, j : Item | (j in i.next.t) iff (i in j.prev.t) --обратимость операции
-	all i : Item | i not in i.^(next.t) -- нет циклов
-	
-	all i : Item | (i.condition.t = Outside_List_Item) implies { -- свойства элементов вне списка
-		all l : List | i not in l.items.t 
+	all i : t.list_items { -- работаем только с элементами списка
+		some i.next.t implies i = i.next.t.prev.t -- если есть следующий, то его предыдущий - это текущий элемент
+		some i.prev.t implies i = i.prev.t.next.t -- аналогично для предыдущих
 	}
-	all i : Item | i.condition.t = List_Item implies
-		one l : List | i in l.items.t --все элементы, помеченные List_Item, действительно в списке
-
-	all l : List { --для элементов в списке 
-		all disj i, j : Item | ((i in l.items.t) and (j in l.items.t)) implies 
-			((j in i.^(next.t)) or (j in i.^(prev.t))) -- достижимость каждого из каждого 
-		all disj i, j : Item | (i in l.items.t and j in i.next.t) implies j in l.items.t --next не может выводить из списка
-		all disj i, j : Item | (i in l.items.t and j in i.prev.t) implies j in l.items.t --prev не может выводить из списка
-	}
-	
-}
-
-pred is_list_valid[t : Time] { -- для проверок
-	all i, j : Item | j = i.next.t iff i = j.prev.t --обратимость операции
-	all i : Item | all t : Time | i not in i.^(next.t) -- нет циклов по next
-	all i : Item | all t : Time | i not in i.^(prev.t) -- нет циклов по prev
-	no i, j : Item | all t : Time | (j in i.^(next.t)) and (j in i .^(prev.t)) -- нет циклов
-	
-	all i : Item | (i.condition.t = Outside_List_Item) implies { -- свойства элементов вне списка
-		#(i.next.t) = 0
-		#(i.prev.t) = 0
-		all l : List | i not in l.items.t 
-	}
-	all i : Item | i.condition.t = List_Item implies
-		one l : List | i in l.items.t --все элементы, помеченные List_Item, действительно в списке
-	
-	all l : List { --для элементов в списке 
-		all disj i, j : Item | ((i in l.items.t) and (j in l.items.t)) implies
-			((j in i.^(next.t)) or (j in i.^(prev.t))) -- достижимость каждого из каждого
-		all disj i, j : Item | (i in l.items.t and j in i.next.t) implies j in l.items.t --next не может выводить из списка
-		all disj i, j : Item | (i in l.items.t and j in i.prev.t) implies j in l.items.t --prev не может выводить из списка 
-	}
+	all i : t.list_items | i not in i.all_reachable[t] -- нет циклов в элементах списка
+	no (t.list_items & t.unallocated_items) -- элементы списка и свободные не пересекаются
+	t.list_items = List.items.t -- все аллоцированные в списке 
+	all i : t.list_items | i.all_reachable[t] + i = t.list_items -- все достижимые из каждого элемента - равны списку
+	no t.first_list_item iff no t.last_list_item -- случай пустого списка
 }
 
 pred items_the_same_except[now : Time, changed_items : set Item] {
-	let past = now.prev {
+	let future = now.next {
 		all it : Item - changed_items {
-			it.condition.past = it.condition.now
-			it.next.past = it.next.now
-			it.prev.past = it.prev.now
+			it.condition.future = it.condition.now
+			it.next.future = it.next.now
+			it.prev.future = it.prev.now
+			it in List.items.now iff it in List.items.future
 		}
 	}
 }
 
-pred empty[t : Time, l : List] {
-	no it : Item | it in l.items.t
+pred empty[t : Time] {
+	no it : Item | it.condition.t = List_Item
 }
 
 example: run {
-	all t : Time | list_valid[t]
-} for 5
-
-assert list_validity {
-	all t : Time | list_valid[t] implies is_list_valid[t]
-}
-
-validate: check list_validity for 5
+	all t : Time {
+		list_valid[t]
+		#(t.list_items) >= 3 
+	}
+} for 6 but exactly 5 Item
